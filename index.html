@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Probabilistic Spelling Correction System</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-header">
+  <h1>Probabilistic Spelling Correction System</h1>
+  <span class="corpus-badge">Medical Science Corpus</span>
+</div>
+
+<div class="app" id="app">
+  <!-- Main Panel -->
+  <div class="main-panel">
+    <div class="toolbar">
+      <button class="btn primary" onclick="runCheck()">&#10003; Check Spelling</button>
+      <button class="btn" onclick="loadSample()">Load Sample Text</button>
+      <button class="btn danger" onclick="clearAll()">Clear</button>
+    </div>
+
+    <!-- Text Editor -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-label">Text Editor</span>
+        <span class="hint">max 500 characters</span>
+      </div>
+      <div class="editor-wrap">
+        <textarea id="editor" maxlength="500"
+          placeholder="Type or paste medical text here..."
+          oninput="updateCount()"></textarea>
+        <span class="char-count" id="charCount">0 / 500</span>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat">
+        <div class="n" id="sTotal">0</div>
+        <div class="l">total words</div>
+      </div>
+      <div class="stat">
+        <div class="n n-nonword" id="sNonword">0</div>
+        <div class="l">non-word errors</div>
+      </div>
+      <div class="stat">
+        <div class="n n-realword" id="sRealword">0</div>
+        <div class="l">real-word errors</div>
+      </div>
+      <div class="stat">
+        <div class="n n-ok" id="sOk">0</div>
+        <div class="l">correct words</div>
+      </div>
+    </div>
+
+    <!-- Highlighted Output -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-label">Highlighted Text</span>
+        <div class="legend">
+          <span class="leg"><span class="leg-dot red"></span>Non-word error</span>
+          <span class="leg"><span class="leg-dot amber"></span>Real-word error</span>
+        </div>
+      </div>
+      <div class="highlight-view" id="highlighted">
+        <span class="placeholder">Highlighted text will appear here after checking...</span>
+      </div>
+    </div>
+
+    <!-- Suggestions -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-label">Suggestions</span>
+        <span id="activeWordLabel" class="active-word-label"></span>
+      </div>
+      <div class="suggestion-box" id="suggestionBox">
+        <div class="suggestion-header">Click a highlighted word to see correction suggestions with edit distance scores.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side Panel -->
+  <div class="side-panel">
+    <div class="side-tabs">
+      <button class="tab active" onclick="switchTab('corpus')" id="tab-corpus">Corpus Words</button>
+      <button class="tab" onclick="switchTab('bigrams')" id="tab-bigrams">Bigrams</button>
+      <button class="tab" onclick="switchTab('methods')" id="tab-methods">Methods</button>
+    </div>
+
+    <!-- Corpus Tab -->
+    <div class="side-content" id="side-corpus">
+      <input type="text" class="search-input" id="wordSearch"
+        placeholder="Search corpus words..."
+        oninput="filterWords(this.value)">
+      <div class="count-label" id="wordCountLabel"></div>
+      <ul class="word-list" id="wordList"></ul>
+    </div>
+
+    <!-- Bigrams Tab -->
+    <div class="side-content" id="side-bigrams" style="display:none">
+      <input type="text" class="search-input" id="bigramSearch"
+        placeholder="Filter bigrams..."
+        oninput="filterBigrams(this.value)">
+      <div class="count-label" id="bigramCountLabel"></div>
+      <div class="bigram-list" id="bigramList"></div>
+    </div>
+
+    <!-- Methods Tab -->
+    <div class="side-content" id="side-methods" style="display:none">
+      <div class="method-card">
+        <h3>Non-word Detection</h3>
+        <p>Words absent from the corpus vocabulary are flagged as non-word errors. Candidates are ranked by minimum edit distance (Levenshtein) combined with unigram probability from the corpus.</p>
+      </div>
+      <div class="method-card">
+        <h3>Real-word Detection</h3>
+        <p>Context-sensitive errors are detected using bigram language model probabilities. If P(w<sub>i</sub>|w<sub>i-1</sub>) is significantly lower than a plausible alternative, the word is flagged.</p>
+      </div>
+      <div class="method-card">
+        <h3>Minimum Edit Distance (Levenshtein)</h3>
+        <p>Dynamic programming computes the minimum number of insertions, deletions, and substitutions to transform one word into another. Candidates with distance &le; 2 are presented.</p>
+      </div>
+      <div class="method-card">
+        <h3>Noisy Channel Model</h3>
+        <p>Best correction = argmax P(word) &times; P(typo|word). Combines the prior probability of a word (language model) with the likelihood of producing the observed error.</p>
+      </div>
+      <div class="method-card">
+        <h3>Bigram Language Model</h3>
+        <p>Probabilities P(w<sub>i</sub>|w<sub>i-1</sub>) are estimated from the medical corpus. Used both for real-word error detection and for re-ranking correction candidates by context.</p>
+      </div>
+      <div class="method-card">
+        <h3>Corpus Details</h3>
+        <p>Medical science domain (~100,000+ word tokens). Vocabulary covers clinical text including pharmacology, pathology, anatomy, immunology, and diagnostic terminology.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="corpus.js"></script>
+<script src="nlp.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
