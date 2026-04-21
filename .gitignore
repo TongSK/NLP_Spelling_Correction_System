@@ -1,0 +1,8 @@
+# Ignore a specific file
+
+
+# Ignore an entire folder
+.idea/
+venv/
+backend/__pycache__
+backend/data
