@@ -149,7 +149,7 @@ class SymSpellWrapper:
             self._Verbosity = Verbosity
             ss = SymSpell(max_dictionary_edit_distance=max_edit, prefix_length=7)
             if os.path.exists(freq_path):
-                ss.load_dictionary(freq_path, term_index=0, count_index=1)
+                ss.load_dictionary(freq_path, term_index=0, count_index=1, separator="\t")
                 self.sym_spell = ss
                 log.info("SymSpell loaded: %d entries", len(self._freq))
             else:
