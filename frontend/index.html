@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Probabilistic Spelling Correction System</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-left">
+    <h1>Spelling Correction System</h1>
+    <span class="badge corpus">Medical Corpus</span>
+  </div>
+  <div class="header-right">
+    <span class="badge" id="bertBadge" style="display:none"></span>
+    <span class="badge" id="vocabBadge" style="display:none"></span>
+    <span id="serverStatus" class="server-status">Connecting...</span>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- ══════════════════════ MAIN PANEL ══════════════════════ -->
+  <main class="main-panel">
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <button class="btn primary" id="checkBtn" onclick="runCheck()">
+        &#10003;&nbsp; Check Spelling
+      </button>
+      <button class="btn" onclick="loadSample()">Load Sample</button>
+      <button class="btn danger" onclick="clearAll()">Clear</button>
+      <span class="spinner" id="spinner" style="display:none">Analysing...</span>
+    </div>
+
+    <!-- Editor -->
+    <section class="section">
+      <div class="section-header">
+        <span class="section-label">Text Editor</span>
+        <span class="hint">max 500 characters</span>
+      </div>
+      <div class="editor-wrap">
+        <textarea id="editor" maxlength="500"
+          placeholder="Type or paste medical text here... e.g. The pashent has diabetis and hypertenshon."
+          oninput="updateCount()"></textarea>
+        <span class="char-count" id="charCount">0 / 500</span>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat"><div class="n" id="sTotal">0</div><div class="l">total words</div></div>
+      <div class="stat"><div class="n red" id="sNonword">0</div><div class="l">non-word errors</div></div>
+      <div class="stat"><div class="n amber" id="sRealword">0</div><div class="l">real-word errors</div></div>
+      <div class="stat"><div class="n green" id="sOk">0</div><div class="l">correct</div></div>
+    </div>
+
+    <!-- Highlighted output -->
+    <section class="section">
+      <div class="section-header">
+        <span class="section-label">Highlighted Text</span>
+        <div class="legend">
+          <span class="leg"><span class="dot red"></span>Non-word error</span>
+          <span class="leg"><span class="dot amber"></span>Real-word error</span>
+        </div>
+      </div>
+      <div class="highlight-view" id="highlighted">
+        <span class="placeholder">Highlighted text will appear here after checking...</span>
+      </div>
+    </section>
+
+    <!-- Suggestions -->
+    <section class="section">
+      <div class="section-header">
+        <span class="section-label">Suggestions</span>
+        <span id="activeWordLabel" class="active-label"></span>
+      </div>
+      <div class="suggestion-box" id="suggestionBox">
+        <p class="hint">Click a highlighted word above to see correction suggestions.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════════════════ SIDE PANEL ══════════════════════ -->
+  <aside class="side-panel">
+    <div class="side-tabs">
+      <button class="tab active" id="tab-corpus"  onclick="switchTab('corpus')">Corpus</button>
+      <button class="tab"        id="tab-bigrams" onclick="switchTab('bigrams')">Bigrams</button>
+      <button class="tab"        id="tab-methods" onclick="switchTab('methods')">Methods</button>
+    </div>
+
+    <!-- Corpus Words -->
+    <div class="side-content" id="side-corpus">
+      <input class="search-input" id="wordSearch" type="text"
+        placeholder="Search vocabulary..." oninput="filterWords(this.value)">
+      <div class="count-label" id="wordCountLabel">Loading...</div>
+      <ul class="word-list" id="wordList"></ul>
+      <button class="btn load-more" id="wordLoadMore" onclick="loadMoreWords()" style="display:none">
+        Load more
+      </button>
+    </div>
+
+    <!-- Bigrams -->
+    <div class="side-content" id="side-bigrams" style="display:none">
+      <input class="search-input" id="bigramSearch" type="text"
+        placeholder="Filter bigrams..." oninput="filterBigrams(this.value)">
+      <div class="count-label" id="bigramCountLabel">Loading...</div>
+      <div class="bigram-list" id="bigramList"></div>
+    </div>
+
+    <!-- Methods -->
+    <div class="side-content" id="side-methods" style="display:none">
+      <div class="method-card">
+        <h3>Non-word Detection</h3>
+        <p>Words absent from the corpus vocabulary are flagged. SymSpell generates candidates in O(1) using a pre-computed delete-neighbourhood index.</p>
+      </div>
+      <div class="method-card">
+        <h3>Real-word Detection</h3>
+        <p>Context-sensitive errors are detected by BERT (bert-base-uncased). If the masked log-probability of the word is low and a confusable alternative scores higher, the word is flagged.</p>
+      </div>
+      <div class="method-card">
+        <h3>BERT (Masked LM)</h3>
+        <p>The word is replaced with <code>[MASK]</code> and BERT predicts the most likely token. This gives true bidirectional context — far beyond what bigrams can capture.</p>
+      </div>
+      <div class="method-card">
+        <h3>SymSpell</h3>
+        <p>Pre-computes all deletes within edit distance 2 at load time. Lookup is O(1) average vs O(n·|vocab|) for brute-force Levenshtein.</p>
+      </div>
+      <div class="method-card">
+        <h3>Minimum Edit Distance</h3>
+        <p>Levenshtein distance (insertions, deletions, substitutions) annotates every suggestion chip so users see exactly how far the correction is from the original word.</p>
+      </div>
+      <div class="method-card">
+        <h3>Noisy Channel Model</h3>
+        <p>Final score = log P(candidate) + 0.5 × bigram score + 1.0 × BERT score. Combines corpus prior with contextual evidence.</p>
+      </div>
+      <div class="method-card">
+        <h3>Bigram Language Model</h3>
+        <p>Add-k smoothed bigram counts from the corpus serve as a fast fallback when BERT is unavailable, and as an additional signal during re-ranking.</p>
+      </div>
+      <div class="method-card">
+        <h3>Corpus</h3>
+        <p>Medical science domain — Gray's Anatomy, Merck Manual, Materia Medica, and supplementary NLTK corpora — totalling 100 000+ word tokens.</p>
+      </div>
+    </div>
+  </aside>
+
+</div><!-- .app -->
+
+<script src="app.js"></script>
+</body>
+</html>
