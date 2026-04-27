@@ -14,8 +14,6 @@
     <span class="badge corpus">Medical Corpus</span>
   </div>
   <div class="header-right">
-    <span class="badge" id="bertBadge" style="display:none"></span>
-    <span class="badge" id="vocabBadge" style="display:none"></span>
     <span id="serverStatus" class="server-status">Connecting...</span>
   </div>
 </header>
@@ -113,39 +111,39 @@
 
     <!-- Methods -->
     <div class="side-content" id="side-methods" style="display:none">
-      <div class="method-card">
-        <h3>Non-word Detection</h3>
-        <p>Words absent from the corpus vocabulary are flagged. SymSpell generates candidates in O(1) using a pre-computed delete-neighbourhood index.</p>
-      </div>
-      <div class="method-card">
-        <h3>Real-word Detection</h3>
-        <p>Context-sensitive errors are detected by BERT (bert-base-uncased). If the masked log-probability of the word is low and a confusable alternative scores higher, the word is flagged.</p>
-      </div>
-      <div class="method-card">
-        <h3>BERT (Masked LM)</h3>
-        <p>The word is replaced with <code>[MASK]</code> and BERT predicts the most likely token. This gives true bidirectional context — far beyond what bigrams can capture.</p>
-      </div>
-      <div class="method-card">
-        <h3>SymSpell</h3>
-        <p>Pre-computes all deletes within edit distance 2 at load time. Lookup is O(1) average vs O(n·|vocab|) for brute-force Levenshtein.</p>
-      </div>
-      <div class="method-card">
-        <h3>Minimum Edit Distance</h3>
-        <p>Levenshtein distance (insertions, deletions, substitutions) annotates every suggestion chip so users see exactly how far the correction is from the original word.</p>
-      </div>
-      <div class="method-card">
-        <h3>Noisy Channel Model</h3>
-        <p>Final score = log P(candidate) + 0.5 × bigram score + 1.0 × BERT score. Combines corpus prior with contextual evidence.</p>
-      </div>
-      <div class="method-card">
-        <h3>Bigram Language Model</h3>
-        <p>Add-k smoothed bigram counts from the corpus serve as a fast fallback when BERT is unavailable, and as an additional signal during re-ranking.</p>
-      </div>
-      <div class="method-card">
-        <h3>Corpus</h3>
-        <p>Medical science domain — Gray's Anatomy, Merck Manual, Materia Medica, and supplementary NLTK corpora — totalling 100 000+ word tokens.</p>
-      </div>
-    </div>
+  <div class="method-card">
+    <h3>Non-word Detection</h3>
+    <p>Utilizes a <strong>Hybrid Dictionary Strategy</strong>. The system merges candidates from a specialized medical SymSpell index (O(1) lookup) with standard English vocabulary (PySpellChecker), ensuring broad coverage without sacrificing domain specificity.</p>
+  </div>
+  <div class="method-card">
+    <h3>Real-word Detection</h3>
+    <p>Context-sensitive errors (e.g., "horse" vs. "hoarse") are detected using a <strong>Bidirectional Bigram Model</strong>. By evaluating the local sentence structure against an aggressive 10x probability threshold, anomalies are flagged with high precision.</p>
+  </div>
+  <div class="method-card">
+    <h3>Bidirectional Bigrams</h3>
+    <p>Unlike standard left-to-right models, this system checks both the <strong>Left Context</strong> (<i>w<sub>i-1</sub> &rarr; w<sub>i</sub></i>) and <strong>Right Context</strong> (<i>w<sub>i</sub> &rarr; w<sub>i+1</sub></i>). This provides robust syntactic validation without the computational overhead of deep learning.</p>
+  </div>
+  <div class="method-card">
+    <h3>Lemmatization & Root Analysis</h3>
+    <p>Powered by NLTK's <code>WordNetLemmatizer</code>. Before flagging a real-word error, the system reduces both the typed word and candidates to their base morphological roots (e.g., "kidney" vs "kidneys") to completely eliminate false positives on plurals.</p>
+  </div>
+  <div class="method-card">
+    <h3>Noisy Channel Model</h3>
+    <p>Suggestions are mathematically ranked using a custom log-linear formula: <i>Base Frequency - (10 &times; Edit Distance) + Bigram Context + Domain Bonus</i>. Medical terms receive a +5.0 priority boost to surface the most contextually relevant clinical corrections.</p>
+  </div>
+  <div class="method-card">
+    <h3>SymSpell Optimization</h3>
+    <p>Pre-computes all deletes within a maximum edit distance at load time. This spatial index lookup drastically reduces computational complexity compared to traditional brute-force Levenshtein algorithms.</p>
+  </div>
+  <div class="method-card">
+    <h3>Minimum Edit Distance</h3>
+    <p>A custom dynamic-programming Levenshtein algorithm calculates the physical "cost" of a typo (insertions, deletions, substitutions). This metric annotates every UI suggestion chip so users see the exact distance from their original input.</p>
+  </div>
+  <div class="method-card">
+    <h3>Medical Corpus</h3>
+    <p>A highly specialized, clean domain vocabulary curated from 19th-century clinical texts (Gray's Anatomy, etc.). Filtered via ML language detection (<code>langdetect</code>) to eliminate OCR noise, totalling over <strong>640,000 word tokens</strong>.</p>
+  </div>
+</div>
   </aside>
 
 </div><!-- .app -->

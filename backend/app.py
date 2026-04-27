@@ -119,8 +119,6 @@ def status():
     """Health check — returns model availability flags."""
     return jsonify({
         "ok"       : True,
-        "bert_on"  : engine.bert.available,
-        "vocab"    : len(engine.vocab),
     })
 
 
@@ -164,8 +162,12 @@ def check_spelling():
     if len(text) > 5000:
         return jsonify({"error": "Text exceeds 5 000 character limit."}), 400
 
+    # Extract the ignored indices array from the JavaScript ---
+    # If it's not in the request, default to an empty list []
+    ignored_indices = data.get("ignored_indices", [])
+
     try:
-        result = engine.check(text)
+        result = engine.check(text, ignored_indices=ignored_indices)
         return jsonify(result)
     except Exception as exc:
         log.exception("Error during spell-check: %s", exc)

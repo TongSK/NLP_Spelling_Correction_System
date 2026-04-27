@@ -17,6 +17,8 @@ const API_BASE = "http://localhost:5000/api";
 let currentTokens = [];    // raw token array from last /api/check response
 let currentErrors  = {};   // { token_index: errorDescriptor }
 
+let ignoredIndices = [];   // remembers which words the user accepted or ignored
+
 let wordOffset    = 0;
 let wordQuery     = "";
 let bigramQuery   = "";
@@ -38,24 +40,6 @@ async function checkServerStatus() {
 
     el.textContent = "Server connected";
     el.className   = "server-status ok";
-
-    // BERT badge
-    const bertBadge = document.getElementById("bertBadge");
-    bertBadge.style.display = "";
-    if (data.bert_on) {
-      bertBadge.textContent = "BERT ON";
-      bertBadge.className   = "badge bert-on";
-    } else {
-      bertBadge.textContent = "BERT OFF (bigram fallback)";
-      bertBadge.className   = "badge bert-off";
-    }
-
-    // Vocab badge
-    const vocabBadge = document.getElementById("vocabBadge");
-    vocabBadge.style.display = "";
-    vocabBadge.textContent   = `${Number(data.vocab).toLocaleString()} words`;
-    vocabBadge.className     = "badge vocab";
-
   } catch {
     el.textContent = "Server offline — start app.py";
     el.className   = "server-status err";
@@ -63,22 +47,79 @@ async function checkServerStatus() {
 }
 
 // ── Editor helpers ────────────────────────────────────────────
+/*
 function updateCount() {
   const len = document.getElementById("editor").value.length;
   const el  = document.getElementById("charCount");
   el.textContent = `${len} / 500`;
   el.className   = len > 470 ? "char-count warn" : "char-count";
 }
+  */
+ // ── Editor helpers ────────────────────────────────────────────
+function updateCount() {
+  const editor = document.getElementById("editor");
+  const text = editor.value;
+  const len = text.length;
+  const el  = document.getElementById("charCount");
+  el.textContent = `${len} / 500`;
+  el.className   = len > 470 ? "char-count warn" : "char-count";
+  
+  const cursorPos = editor.selectionStart;
 
+  const textBeforeCursor = text.substring(0, cursorPos);
+
+  // Count how many valid words are in that text.
+  // We use a regex that matches the Python backend to count the words.
+  const wordsBeforeCursor = (textBeforeCursor.match(/[a-zA-Z]+/g) || []).length;
+
+  // The user is currently editing at (or just after) this word index.
+  // Because they are typing here, any word AFTER this point might shift its position.
+  // We calculate a "Safe Limit" (subtracting 1 to be safe about the current word being edited).
+  const safeIndexLimit = Math.max(0, wordsBeforeCursor - 1);
+
+  // 5. Filter the ignore list! Keep only the indices that are safely BEFORE the edit.
+  ignoredIndices = ignoredIndices.filter(index => index < safeIndexLimit);
+}
+
+
+// ── Editor helpers ────────────────────────────────────────────
 function loadSample() {
-  document.getElementById("editor").value =
-    "The pashent has diabetis and hypertenshon. The doctar prescribed " +
-    "medcine for the conditon. Liver disease can affect the kidny. " +
-    "Blood presure was carefully monitered by the specalist.";
+  ignoredIndices = [];
+  
+  // A curated list of 10 clinical scenarios.
+  const sampleParagraphs = [
+    "A pashent arrived at the clinic complaining of severe head paint in these few days. The doctar examined his spiral cord but found zero abnormalities.",
+    
+    "She experienced muscle weekness in her left led for several days. The ultrasound revealed a blocked vain of the knee joint. The surgeon will operate to restore normal blood flow. She requires immediate medcine to prevent clotting.",
+    
+    "The surgeon successfully clamped the lacerated artary during the operation. This quick action prevented any further lose of blood. The anesthesiologist monitored her hert rate carefully. It will take a long coarse to recover.",
+    
+    "A specalist recommended physical straining after the plaster was removed. It simply cannot support the wait of the arm right now. The fractured coller bone requires a specialized sling to heal properly. Rehabilitation is a slow root to recovery.",
+    
+    "My friend felt a sudden weekness in her left site and the doctar ordered an Magnetic Resonance Imaging to check for a brain bleed. The results showed a small clott near the frontal lobe. It will by a long course of treatment.",
+
+    "Damage to the optick nerve can lead to permanent visual impairment. The patient reported a sudden loss of site in their right eye. They could knot see clearly in dim light. Urgent examinatns is required immediately.",
+    
+    "Her attending physcian noted that the fraxture was quite complicated. The bone was broken completely away from its bass. It will require surgery add extensive rehabilitation. The patient must rest for six weeks.",
+    
+    "My child's sudden feaver was accompanied by chills and sweating. Pediatricians an the nurse administered fluids intravenously to manage the severity if this illness. They monitored his temperture every hour. His breathing sounded like a hoarse whisper.",
+    
+    "The nurse recorded the vitals an the existence of chest paint or other problems.  Doctars will check the patient's Electrocardiogram results shortly. There is a small clott in the left ventricle. We must monitor patients closely tonight.",
+    
+    "She does have a weekness in the valves of her left vain. The blood pressure is too high an needs medication. Therefore, the presciption must be taken twice daily."
+  ];
+
+  // Pick a random number between 0 and 9
+  const randomIndex = Math.floor(Math.random() * sampleParagraphs.length);
+
+  // Set the editor value to the randomly selected paragraph
+  document.getElementById("editor").value = sampleParagraphs[randomIndex];
+  
   updateCount();
 }
 
 function clearAll() {
+  ignoredIndices = [];
   document.getElementById("editor").value = "";
   document.getElementById("highlighted").innerHTML =
     '<span class="placeholder">Highlighted text will appear here after checking...</span>';
@@ -104,7 +145,10 @@ async function runCheck() {
     const res = await fetch(`${API_BASE}/check`, {
       method  : "POST",
       headers : { "Content-Type": "application/json" },
-      body    : JSON.stringify({ text }),
+      body    : JSON.stringify({ 
+        text: text,
+        ignored_indices: ignoredIndices
+      }),
     });
 
     if (!res.ok) {
@@ -189,10 +233,21 @@ function showSuggestions(tokenIdx) {
     return;
   }
 
-  let html = '<p class="hint" style="margin-bottom:4px">Ranked by edit distance · corpus frequency · BERT context score:</p>';
+  let html = '<p class="hint" style="margin-bottom:4px">Ranked by edit distance · corpus frequency · bidirectional bigram score:</p>';
   html += '<div class="sugg-list">';
+
+  const textBefore = currentTokens.slice(0, tokenIdx).join("").trim();
+
+  const isLeadingWord = textBefore === "" || /[.!?]$/.test(textBefore);
+
   e.candidates.forEach(c => {
-    const safeWord = escHtml(c.word);
+    let finalWord = c.word;
+
+    if (isLeadingWord) {
+      finalWord = finalWord.charAt(0).toUpperCase() + finalWord.slice(1);
+    }
+
+    const safeWord = escHtml(finalWord);
     html +=
       `<span class="sugg-chip" onclick="applySuggestion(${tokenIdx},'${safeWord}')">` +
       `${safeWord}` +
@@ -200,6 +255,16 @@ function showSuggestions(tokenIdx) {
       `</span>`;
   });
   html += "</div>";
+
+  html += `<div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">` +
+            `<span class="hint" style="margin:0;">Word spelled correctly?</span>` +
+            `<button style="background: transparent; color: #64748b; border: 1px solid #cbd5e1; padding: 4px 10px; font-size: 0.85rem; border-radius: 4px; cursor: pointer; transition: all 0.2s;" ` +
+            `onmouseover="this.style.background='#f8fafc'; this.style.color='#0f172a';" ` +
+            `onmouseout="this.style.background='transparent'; this.style.color='#64748b';" ` +
+            `onclick="ignoreError(${tokenIdx})">` +
+            `&#10006; Ignore Error</button>` +
+          `</div>`;
+
   box.innerHTML = html;
 
   // Highlight the selected token
@@ -208,10 +273,44 @@ function showSuggestions(tokenIdx) {
     .forEach(el => el.style.outline = "2px solid #185FA5");
 }
 
-// ── Apply a chosen suggestion ─────────────────────────────────
+// ── Ignore an error without changing the text ─────────────────
+function ignoreError(tokenIdx) {
+  const errorToIgnore = currentErrors[tokenIdx];
+  if (!errorToIgnore) return;
+
+  const totalEl = document.getElementById("sTotal");
+  const okEl = document.getElementById("sOk");
+
+  if (totalEl) totalEl.textContent = Math.max(0, parseInt(totalEl.textContent) - 1);
+  if (okEl) okEl.textContent = parseInt(okEl.textContent) + 1;
+
+  if (errorToIgnore.type === "nonword") {
+    const nwEl = document.getElementById("sNonword");
+    if (nwEl) nwEl.textContent = Math.max(0, parseInt(nwEl.textContent) - 1);
+  } else {
+    const rwEl = document.getElementById("sRealword");
+    if (rwEl) rwEl.textContent = Math.max(0, parseInt(rwEl.textContent) - 1);
+  }
+
+  if (!ignoredIndices.includes(tokenIdx)) {
+    ignoredIndices.push(tokenIdx);
+  }
+  
+  delete currentErrors[tokenIdx];
+  
+  renderHighlighted();
+  
+  document.getElementById("suggestionBox").innerHTML = '<p class="hint">Error ignored and statistics updated.</p>';
+  document.getElementById("activeWordLabel").textContent = "";
+}
+
 function applySuggestion(tokenIdx, newWord) {
   currentTokens[tokenIdx] = newWord;
   delete currentErrors[tokenIdx];
+
+  if (!ignoredIndices.includes(tokenIdx)) {
+    ignoredIndices.push(tokenIdx);
+  }
 
   document.getElementById("editor").value = currentTokens.join("");
   updateCount();
@@ -235,7 +334,7 @@ async function loadCorpusWords(reset = true) {
     const data = await res.json();
 
     document.getElementById("wordCountLabel").textContent =
-      `${data.total.toLocaleString()} words in corpus`;
+      `${data.total.toLocaleString()} words available in corpus`;
 
     const ul = document.getElementById("wordList");
     if (reset) ul.innerHTML = "";
@@ -273,7 +372,7 @@ async function loadBigrams(reset = true) {
     const data = await res.json();
 
     document.getElementById("bigramCountLabel").textContent =
-      `${data.total.toLocaleString()} bigrams`;
+      `${data.total.toLocaleString()} available bigrams`;
 
     const maxCount = data.bigrams.length ? data.bigrams[0].count : 1;
     const div = document.getElementById("bigramList");
