@@ -32,7 +32,6 @@ from collections import defaultdict
 from typing import List, Dict, Tuple, Optional
 from spellchecker import SpellChecker
 import numpy as np
-import numpy as np
 import nltk
 from nltk.stem import WordNetLemmatizer
 
